@@ -12,12 +12,16 @@
  */
 export function renderTaskCard(task, isCompleted) {
   const progress = task.targetCount > 0 ? (task.executionCount / task.targetCount) * 100 : 0;
+  const teamInfo = task.teamName || '';
   
   if (isCompleted) {
     return `
       <div class="flex flex-col gap-4 rounded-xl bg-zinc-100 dark:bg-zinc-800/30 p-6" data-task-id="${task.id}">
         <div class="flex items-center justify-between">
-          <p class="text-xl font-bold text-zinc-500 dark:text-zinc-400 line-through">${task.name}</p>
+          <div class="flex flex-col gap-1">
+            <p class="text-xl font-bold text-zinc-500 dark:text-zinc-400 line-through">${task.name}</p>
+            ${teamInfo ? `<p class="text-sm text-zinc-400 dark:text-zinc-500">${teamInfo}</p>` : ''}
+          </div>
           <span class="material-symbols-outlined text-3xl text-green-500" style="font-variation-settings: 'FILL' 1;">check_circle</span>
         </div>
         <div class="w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-700 h-2.5">
@@ -29,11 +33,14 @@ export function renderTaskCard(task, isCompleted) {
 
   return `
     <button 
-      class="task-card flex flex-col gap-4 rounded-xl bg-white dark:bg-zinc-800/50 p-6 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+      class="task-card flex flex-col gap-4 rounded-xl bg-white dark:bg-zinc-800/50 p-6 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-left w-full"
       data-task-id="${task.id}"
     >
       <div class="flex items-center justify-between">
-        <p class="text-xl font-bold text-zinc-900 dark:text-white">${task.name}</p>
+        <div class="flex flex-col gap-1">
+          <p class="text-xl font-bold text-zinc-900 dark:text-white">${task.name}</p>
+          ${teamInfo ? `<p class="text-sm text-zinc-500 dark:text-zinc-400">${teamInfo}</p>` : ''}
+        </div>
         <p class="text-lg font-medium text-zinc-500 dark:text-zinc-400">${task.executionCount} / ${task.targetCount}</p>
       </div>
       <div class="w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700 h-2.5">

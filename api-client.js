@@ -110,34 +110,65 @@ export const ApiClient = {
   },
 
   /**
+   * Aggregate tasks by action_template_id
+   * Groups tasks with same template, counts completed vs total
+   * @param {Array} allTasks - All raw tasks from API
+   * @returns {Array} - Aggregated task objects
+   */
+  aggregateTasks(allTasks) {
+    const grouped = {};
+    
+    allTasks.forEach(task => {
+      const templateId = task.action_template_id || task.id;
+      
+      if (!grouped[templateId]) {
+        grouped[templateId] = {
+          id: templateId,
+          name: task.action_title || 'Unnamed Task',
+          teamName: task.team_name,
+          tasks: [],
+          executionCount: 0,
+          targetCount: 0
+        };
+      }
+      
+      grouped[templateId].tasks.push(task);
+      grouped[templateId].targetCount++;
+      
+      // Count completed tasks (DONE or DELIVERED)
+      if (task.status === 'DONE' || task.status === 'DELIVERED') {
+        grouped[templateId].executionCount++;
+      }
+    });
+    
+    // Convert to array and determine if fully completed
+    return Object.values(grouped).map(group => ({
+      ...group,
+      isCompleted: group.executionCount === group.targetCount && group.targetCount > 0
+    }));
+  },
+
+  /**
    * Fetch user's tasks from G4U API (PENDING + DONE/DELIVERED)
-   * @returns {Promise<Array>} - Array of task objects with isCompleted flag
+   * @returns {Promise<Array>} - Array of aggregated task objects
    */
   async getTasks() {
-    // Fetch PENDING tasks (active)
-    const pendingTasks = await this.getTasksByStatus('PENDING');
-    
-    // Fetch DONE tasks (completed)
-    const doneTasks = await this.getTasksByStatus('DONE');
-    
-    // Fetch DELIVERED tasks (also completed)
-    const deliveredTasks = await this.getTasksByStatus('DELIVERED');
+    // Fetch all task statuses
+    const [pendingTasks, doneTasks, deliveredTasks] = await Promise.all([
+      this.getTasksByStatus('PENDING'),
+      this.getTasksByStatus('DONE'),
+      this.getTasksByStatus('DELIVERED')
+    ]);
 
-    // Map tasks to include isCompleted flag
-    const activeTasks = (Array.isArray(pendingTasks) ? pendingTasks : []).map(task => ({
-      ...task,
-      isCompleted: false
-    }));
-
-    const completedTasks = [
+    // Combine all tasks
+    const allTasks = [
+      ...(Array.isArray(pendingTasks) ? pendingTasks : []),
       ...(Array.isArray(doneTasks) ? doneTasks : []),
       ...(Array.isArray(deliveredTasks) ? deliveredTasks : [])
-    ].map(task => ({
-      ...task,
-      isCompleted: true
-    }));
+    ];
 
-    return [...activeTasks, ...completedTasks];
+    // Aggregate by action_template_id
+    return this.aggregateTasks(allTasks);
   },
 
   /**
