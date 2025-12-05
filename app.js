@@ -52,6 +52,7 @@ const UIController = {
       completedHeader: document.getElementById('completed-header'),
       completedTasks: document.getElementById('completed-tasks'),
       refreshButton: document.getElementById('refresh-button'),
+      logoutButton: document.getElementById('logout-button'),
       
       // Modal
       completionModal: document.getElementById('completion-modal'),
@@ -76,6 +77,7 @@ const UIController = {
     
     // Task list events
     this.elements.refreshButton?.addEventListener('click', this.handleRefresh.bind(this));
+    this.elements.logoutButton?.addEventListener('click', this.handleLogout.bind(this));
     
     // Modal events
     this.elements.modalConfirm?.addEventListener('click', this.handleConfirmCompletion.bind(this));
@@ -302,6 +304,17 @@ const UIController = {
    */
   async handleRefresh() {
     await this.fetchTasks();
+  },
+
+  /**
+   * Handle logout button click
+   */
+  handleLogout() {
+    // Clear API token and user email
+    ApiClient.setToken(null);
+    ApiClient.setUserEmail(null);
+    // Reset state to unauthenticated (redirects to login screen)
+    StateManager.reset();
   },
 
   /**
