@@ -152,7 +152,8 @@ describe('StateManager Property Tests', () => {
         user: null,
         tasks: [],
         isLoading: false,
-        error: null
+        error: null,
+        pendingChanges: []
       };
 
       fc.assert(

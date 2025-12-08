@@ -34,9 +34,12 @@ export function renderTaskCard(task, isCompleted) {
     `;
   }
 
+  // Add conflict styling if task has conflict
+  const conflictClass = task.hasConflict ? 'ring-2 ring-red-500 animate-pulse' : '';
+  
   return `
     <button 
-      class="task-card flex flex-col gap-4 rounded-xl bg-white dark:bg-zinc-800/50 p-6 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-left w-full"
+      class="task-card flex flex-col gap-4 rounded-xl bg-white dark:bg-zinc-800/50 p-6 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-left w-full ${conflictClass}"
       data-task-id="${task.id}"
     >
       <div class="flex items-center justify-between">

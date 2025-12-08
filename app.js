@@ -6,6 +6,7 @@
 // Import modules
 import { StateManager } from './state-manager.js';
 import { ApiClient } from './api-client.js';
+import { SyncQueue } from './sync-queue.js';
 import { validateCredentials } from './validation.js';
 import { renderTaskCard, sortTasks, incrementExecutionCount, decrementExecutionCount, shouldTriggerCompletionPrompt, confirmCompletion, declineCompletion } from './task-utils.js';
 
@@ -53,6 +54,8 @@ const UIController = {
       completedTasks: document.getElementById('completed-tasks'),
       refreshButton: document.getElementById('refresh-button'),
       logoutButton: document.getElementById('logout-button'),
+      syncIndicator: document.getElementById('sync-indicator'),
+      syncCount: document.getElementById('sync-count'),
       
       // Modal
       completionModal: document.getElementById('completion-modal'),
@@ -99,6 +102,7 @@ const UIController = {
       this.elements.taskListScreen.classList.remove('hidden');
       this.elements.taskListScreen.classList.add('flex');
       this.renderTasks(state.tasks);
+      this.updateSyncIndicator(state.pendingChanges);
     } else {
       this.elements.loginScreen.classList.remove('hidden');
       this.elements.taskListScreen.classList.add('hidden');
@@ -108,6 +112,21 @@ const UIController = {
     // Show error toast if error exists
     if (state.error) {
       this.showErrorToast(state.error);
+    }
+  },
+
+  /**
+   * Update sync indicator visibility and count
+   * @param {Array} pendingChanges - Array of pending changes
+   */
+  updateSyncIndicator(pendingChanges = []) {
+    if (pendingChanges.length > 0) {
+      this.elements.syncIndicator.classList.remove('hidden');
+      this.elements.syncIndicator.classList.add('flex');
+      this.elements.syncCount.textContent = pendingChanges.length;
+    } else {
+      this.elements.syncIndicator.classList.add('hidden');
+      this.elements.syncIndicator.classList.remove('flex');
     }
   },
 
@@ -135,6 +154,13 @@ const UIController = {
 
     // Bind task card events
     this.bindTaskCardEvents();
+    
+    // Auto-clear conflicts after render
+    tasks.forEach(task => {
+      if (task.hasConflict) {
+        SyncQueue.autoClearConflict(task.id);
+      }
+    });
   },
 
   /**
@@ -239,6 +265,9 @@ const UIController = {
       
       // Fetch tasks after login
       await this.fetchTasks();
+      
+      // Initialize sync queue
+      SyncQueue.init();
     } catch (error) {
       StateManager.setState({
         error: error.message,
@@ -341,6 +370,10 @@ const UIController = {
    * Handle logout button click
    */
   handleLogout() {
+    // Stop sync queue
+    SyncQueue.stop();
+    SyncQueue.clearQueue();
+    
     // Clear API token and user email
     ApiClient.setToken(null);
     ApiClient.setUserEmail(null);
@@ -368,31 +401,24 @@ const UIController = {
     const pendingCount = task.tasks.filter(t => t.status === 'PENDING').length;
     if (pendingCount === 0) return;
     
-    // Optimistic update
+    // Optimistic update - instant UI response
     const newCount = task.executionCount + 1;
     const updatedTasks = state.tasks.map(t => 
       t.id === taskId ? { 
         ...t, 
         executionCount: newCount,
-        isCompleted: newCount === t.targetCount
+        isCompleted: newCount === t.targetCount,
+        hasConflict: false // Clear any existing conflict
       } : t
     );
     StateManager.setState({ tasks: updatedTasks });
     
-    // Persist to API - mark oldest PENDING as DONE
-    try {
-      await ApiClient.markOldestPendingAsDone(task);
-      
-      // Refresh tasks to get updated state
-      await this.fetchTasks();
-    } catch (error) {
-      // Revert optimistic update on failure
-      if (error.message === 'SESSION_EXPIRED') {
-        this.handleSessionExpired();
-      } else {
-        StateManager.setState({ tasks: state.tasks, error: error.message });
-      }
-    }
+    // Queue the API request for background processing
+    SyncQueue.enqueue({
+      taskId,
+      action: 'increment',
+      task
+    });
   },
 
   /**
@@ -409,31 +435,24 @@ const UIController = {
     const doneCount = task.tasks.filter(t => t.status === 'DONE').length;
     if (doneCount === 0) return;
     
-    // Optimistic update
+    // Optimistic update - instant UI response
     const newCount = Math.max(task.executionCount - 1, 0);
     const updatedTasks = state.tasks.map(t => 
       t.id === taskId ? { 
         ...t, 
         executionCount: newCount,
-        isCompleted: false
+        isCompleted: false,
+        hasConflict: false // Clear any existing conflict
       } : t
     );
     StateManager.setState({ tasks: updatedTasks });
     
-    // Persist to API - reopen newest DONE task
-    try {
-      await ApiClient.reopenNewestDoneTask(task);
-      
-      // Refresh tasks to get updated state
-      await this.fetchTasks();
-    } catch (error) {
-      // Revert optimistic update on failure
-      if (error.message === 'SESSION_EXPIRED') {
-        this.handleSessionExpired();
-      } else {
-        StateManager.setState({ tasks: state.tasks, error: error.message });
-      }
-    }
+    // Queue the API request for background processing
+    SyncQueue.enqueue({
+      taskId,
+      action: 'decrement',
+      task
+    });
   },
 
   // ==========================================================================
@@ -566,6 +585,10 @@ const UIController = {
    * Clears auth state and redirects to login (Requirement 5.3)
    */
   handleSessionExpired() {
+    // Stop sync queue
+    SyncQueue.stop();
+    SyncQueue.clearQueue();
+    
     // Clear API token
     ApiClient.setToken(null);
     // Reset state to unauthenticated (redirects to login screen)

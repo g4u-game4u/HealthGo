@@ -24,7 +24,8 @@ describe('StateManager', () => {
         user: null,
         tasks: [],
         isLoading: false,
-        error: null
+        error: null,
+        pendingChanges: []
       });
     });
 
@@ -137,7 +138,8 @@ describe('StateManager', () => {
         user: null,
         tasks: [],
         isLoading: false,
-        error: null
+        error: null,
+        pendingChanges: []
       });
     });
 

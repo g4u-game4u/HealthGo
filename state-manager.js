@@ -13,7 +13,8 @@ const initialState = {
   user: null,
   tasks: [],
   isLoading: false,
-  error: null
+  error: null,
+  pendingChanges: [] // Queue of pending API requests
 };
 
 /**
