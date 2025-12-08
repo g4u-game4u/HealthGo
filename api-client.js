@@ -3,7 +3,7 @@
  * Handles all communication with the G4U API
  */
 
-export const API_BASE_URL = 'https://g4u-mvp-api-staging.onrender.com';
+export const API_BASE_URL = 'https://g4u-mvp-api.onrender.com';
 
 export const ApiClient = {
   token: null,
@@ -32,7 +32,7 @@ export const ApiClient = {
   getBaseHeaders() {
     return {
       'Content-Type': 'application/json',
-      'client_id': 'template'
+      'client_id': 'healthgo'
     };
   },
 
