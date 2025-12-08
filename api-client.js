@@ -178,15 +178,23 @@ export const ApiClient = {
    * @returns {Promise<Object>} - Updated task
    */
   async updateTaskStatus(task, newStatus) {
-    // Spread the original task, rename id to action_id, and change status
-    const { id, ...rest } = task;
+    // Build payload with only the required fields, action_id = action_template_id
     const payload = {
-      ...rest,
-      action_id: id,
-      status: newStatus
+      action_id: task.action_template_id,
+      approved: task.approved || false,
+      approved_by: task.approved_by || null,
+      comments: task.comments || [],
+      created_at: task.created_at,
+      delivery_id: task.delivery_id,
+      delivery_title: task.delivery_title,
+      dismissed: task.dismissed || false,
+      finished_at: newStatus === 'DONE' ? new Date().toISOString() : null,
+      integration_id: task.integration_id,
+      status: newStatus,
+      user_email: task.user_email
     };
     
-    console.log('Updating task status:', { actionId: id, newStatus, payload });
+    console.log('Updating task status:', { actionId: task.action_template_id, newStatus, payload });
     
     const response = await fetch(`${API_BASE_URL}/game/action/process`, {
       method: 'POST',
