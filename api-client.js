@@ -178,13 +178,15 @@ export const ApiClient = {
    * @returns {Promise<Object>} - Updated task
    */
   async updateTaskStatus(task, newStatus) {
-    // Just spread the original task and change the status
+    // Spread the original task, rename id to action_id, and change status
+    const { id, ...rest } = task;
     const payload = {
-      ...task,
+      ...rest,
+      action_id: id,
       status: newStatus
     };
     
-    console.log('Updating task status:', { taskId: task.id, newStatus, payload });
+    console.log('Updating task status:', { actionId: id, newStatus, payload });
     
     const response = await fetch(`${API_BASE_URL}/game/action/process`, {
       method: 'POST',
