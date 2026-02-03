@@ -35,7 +35,7 @@ const UIController = {
       // Screens
       loginScreen: document.getElementById('login-screen'),
       taskListScreen: document.getElementById('task-list-screen'),
-      
+
       // Login form
       loginForm: document.getElementById('login-form'),
       emailInput: document.getElementById('email-input'),
@@ -47,7 +47,7 @@ const UIController = {
       emailError: document.getElementById('email-error'),
       passwordError: document.getElementById('password-error'),
       loginError: document.getElementById('login-error'),
-      
+
       // Task list
       activeTasks: document.getElementById('active-tasks'),
       completedHeader: document.getElementById('completed-header'),
@@ -56,13 +56,13 @@ const UIController = {
       logoutButton: document.getElementById('logout-button'),
       syncIndicator: document.getElementById('sync-indicator'),
       syncCount: document.getElementById('sync-count'),
-      
+
       // Modal
       completionModal: document.getElementById('completion-modal'),
       modalBackdrop: document.getElementById('modal-backdrop'),
       modalConfirm: document.getElementById('modal-confirm'),
       modalDecline: document.getElementById('modal-decline'),
-      
+
       // Toast
       errorToast: document.getElementById('error-toast'),
       errorToastMessage: document.getElementById('error-toast-message'),
@@ -77,16 +77,16 @@ const UIController = {
     // Login form events
     this.elements.loginForm?.addEventListener('submit', this.handleLogin.bind(this));
     this.elements.togglePassword?.addEventListener('click', this.togglePasswordVisibility.bind(this));
-    
+
     // Task list events
     this.elements.refreshButton?.addEventListener('click', this.handleRefresh.bind(this));
     this.elements.logoutButton?.addEventListener('click', this.handleLogout.bind(this));
-    
+
     // Modal events
     this.elements.modalConfirm?.addEventListener('click', this.handleConfirmCompletion.bind(this));
     this.elements.modalDecline?.addEventListener('click', this.handleDeclineCompletion.bind(this));
     this.elements.modalBackdrop?.addEventListener('click', this.handleDeclineCompletion.bind(this));
-    
+
     // Toast events
     this.elements.errorToastClose?.addEventListener('click', this.hideErrorToast.bind(this));
   },
@@ -141,10 +141,10 @@ const UIController = {
 
     // Render active tasks
     this.elements.activeTasks.innerHTML = activeTasks.map(task => renderTaskCard(task, false)).join('');
-    
+
     // Render completed tasks
     this.elements.completedTasks.innerHTML = completedTaskList.map(task => renderTaskCard(task, true)).join('');
-    
+
     // Show/hide completed header
     if (completedTaskList.length > 0) {
       this.elements.completedHeader.classList.remove('hidden');
@@ -154,7 +154,7 @@ const UIController = {
 
     // Bind task card events
     this.bindTaskCardEvents();
-    
+
     // Auto-clear conflicts after render
     tasks.forEach(task => {
       if (task.hasConflict) {
@@ -168,11 +168,11 @@ const UIController = {
    */
   bindTaskCardEvents() {
     const taskCards = document.querySelectorAll('.task-card');
-    
+
     taskCards.forEach(card => {
       let startX = 0;
       let isDragging = false;
-      
+
       // Click/tap handler for increment
       card.addEventListener('click', (e) => {
         // Only trigger if not a drag/swipe
@@ -181,17 +181,17 @@ const UIController = {
           this.handleTaskIncrement(taskId);
         }
       });
-      
+
       // Touch handlers for swipe detection
       card.addEventListener('touchstart', (e) => {
         startX = e.changedTouches[0].screenX;
         isDragging = false;
       }, { passive: true });
-      
+
       card.addEventListener('touchend', (e) => {
         const endX = e.changedTouches[0].screenX;
         const swipeDistance = startX - endX;
-        
+
         // Detect right-to-left swipe (minimum 50px)
         if (swipeDistance > 50) {
           isDragging = true;
@@ -200,17 +200,17 @@ const UIController = {
           this.handleTaskDecrement(taskId);
         }
       });
-      
+
       // Mouse handlers for drag detection (desktop)
       card.addEventListener('mousedown', (e) => {
         startX = e.screenX;
         isDragging = false;
       });
-      
+
       card.addEventListener('mouseup', (e) => {
         const endX = e.screenX;
         const swipeDistance = startX - endX;
-        
+
         // Detect right-to-left drag (minimum 50px)
         if (swipeDistance > 50) {
           isDragging = true;
@@ -220,7 +220,7 @@ const UIController = {
           this.handleTaskDecrement(taskId);
         }
       });
-      
+
       // Prevent click after drag
       card.addEventListener('mouseleave', () => {
         isDragging = false;
@@ -238,23 +238,23 @@ const UIController = {
    */
   async handleLogin(e) {
     e.preventDefault();
-    
+
     const email = this.elements.emailInput.value;
     const password = this.elements.passwordInput.value;
-    
+
     // Validate credentials using exported function
     const validation = validateCredentials(email, password);
-    
+
     if (!validation.isValid) {
       // Display validation errors inline
       this.displayValidationErrors(validation.errors);
       return;
     }
-    
+
     // Show loading state
     this.setLoginLoading(true);
     this.clearErrors();
-    
+
     try {
       const response = await ApiClient.login({ email: email.trim(), password });
       StateManager.setState({
@@ -262,10 +262,10 @@ const UIController = {
         user: response.user,
         isLoading: false
       });
-      
+
       // Fetch tasks after login
       await this.fetchTasks();
-      
+
       // Initialize sync queue
       SyncQueue.init();
     } catch (error) {
@@ -288,12 +288,12 @@ const UIController = {
     // Clear previous errors first
     this.elements.emailError.classList.add('hidden');
     this.elements.passwordError.classList.add('hidden');
-    
+
     if (errors.email) {
       this.elements.emailError.textContent = errors.email;
       this.elements.emailError.classList.remove('hidden');
     }
-    
+
     if (errors.password) {
       this.elements.passwordError.textContent = errors.password;
       this.elements.passwordError.classList.remove('hidden');
@@ -331,7 +331,7 @@ const UIController = {
   togglePasswordVisibility() {
     const input = this.elements.passwordInput;
     const icon = this.elements.togglePassword.querySelector('.material-symbols-outlined');
-    
+
     if (input.type === 'password') {
       input.type = 'text';
       icon.textContent = 'visibility_off';
@@ -346,7 +346,7 @@ const UIController = {
    */
   async fetchTasks() {
     StateManager.setState({ isLoading: true });
-    
+
     try {
       const tasks = await ApiClient.getTasks();
       StateManager.setState({ tasks, isLoading: false, error: null });
@@ -373,7 +373,7 @@ const UIController = {
     // Stop sync queue
     SyncQueue.stop();
     SyncQueue.clearQueue();
-    
+
     // Clear API token and user email
     ApiClient.setToken(null);
     ApiClient.setUserEmail(null);
@@ -387,37 +387,59 @@ const UIController = {
    */
   async handleTaskIncrement(taskId) {
     const state = StateManager.getState();
-    const task = state.tasks.find(t => t.id === taskId);
-    
-    if (!task) return;
-    
+    const taskGroup = state.tasks.find(t => t.id === taskId);
+
+    if (!taskGroup) return;
+
     // If already completed, show reopen modal
-    if (task.isCompleted) {
+    if (taskGroup.isCompleted) {
       this.showReopenModal(taskId);
       return;
     }
-    
-    // Check if no pending tasks left
-    const pendingCount = task.tasks.filter(t => t.status === 'PENDING').length;
-    if (pendingCount === 0) return;
-    
+
+    // Find the oldest PENDING task to complete
+    // We sort by created_at to ensure we're targeting a specific, deterministic task
+    const pendingTasks = taskGroup.tasks
+      .filter(t => t.status === 'PENDING')
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    if (pendingTasks.length === 0) return;
+
+    // Target the specific task
+    const taskToComplete = pendingTasks[0];
+
     // Optimistic update - instant UI response
-    const newCount = task.executionCount + 1;
-    const updatedTasks = state.tasks.map(t => 
-      t.id === taskId ? { 
-        ...t, 
-        executionCount: newCount,
-        isCompleted: newCount === t.targetCount,
-        hasConflict: false // Clear any existing conflict
-      } : t
-    );
+    // We update the specific sub-task's status in the local state
+    // AND update the aggregate counts
+    const newCount = taskGroup.executionCount + 1;
+
+    const updatedTasks = state.tasks.map(t => {
+      if (t.id === taskId) {
+        // Create new tasks array with the specific task marked as DONE
+        const newSubTasks = t.tasks.map(subTask =>
+          subTask.id === taskToComplete.id
+            ? { ...subTask, status: 'DONE', finished_at: new Date().toISOString() }
+            : subTask
+        );
+
+        return {
+          ...t,
+          tasks: newSubTasks,
+          executionCount: newCount,
+          isCompleted: newCount === t.targetCount,
+          hasConflict: false
+        };
+      }
+      return t;
+    });
+
     StateManager.setState({ tasks: updatedTasks });
-    
-    // Queue the API request for background processing
+
+    // Queue the API request with the specific sub-task
     SyncQueue.enqueue({
       taskId,
       action: 'increment',
-      task
+      task: taskToComplete // Pass specific sub-task
     });
   },
 
@@ -427,31 +449,50 @@ const UIController = {
    */
   async handleTaskDecrement(taskId) {
     const state = StateManager.getState();
-    const task = state.tasks.find(t => t.id === taskId);
-    
-    if (!task) return;
-    
-    // Check if there are any DONE tasks to reopen
-    const doneCount = task.tasks.filter(t => t.status === 'DONE').length;
-    if (doneCount === 0) return;
-    
+    const taskGroup = state.tasks.find(t => t.id === taskId);
+
+    if (!taskGroup) return;
+
+    // Find newest DONE task to reopen
+    const doneTasks = taskGroup.tasks
+      .filter(t => t.status === 'DONE')
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    if (doneTasks.length === 0) return;
+
+    // Target the specific task
+    const taskToReopen = doneTasks[0];
+
     // Optimistic update - instant UI response
-    const newCount = Math.max(task.executionCount - 1, 0);
-    const updatedTasks = state.tasks.map(t => 
-      t.id === taskId ? { 
-        ...t, 
-        executionCount: newCount,
-        isCompleted: false,
-        hasConflict: false // Clear any existing conflict
-      } : t
-    );
+    const newCount = Math.max(taskGroup.executionCount - 1, 0);
+
+    const updatedTasks = state.tasks.map(t => {
+      if (t.id === taskId) {
+        // Create new tasks array with the specific task marked as PENDING
+        const newSubTasks = t.tasks.map(subTask =>
+          subTask.id === taskToReopen.id
+            ? { ...subTask, status: 'PENDING', finished_at: null }
+            : subTask
+        );
+
+        return {
+          ...t,
+          tasks: newSubTasks,
+          executionCount: newCount,
+          isCompleted: false,
+          hasConflict: false
+        };
+      }
+      return t;
+    });
+
     StateManager.setState({ tasks: updatedTasks });
-    
-    // Queue the API request for background processing
+
+    // Queue the API request with the specific sub-task
     SyncQueue.enqueue({
       taskId,
       action: 'decrement',
-      task
+      task: taskToReopen // Pass specific sub-task
     });
   },
 
@@ -481,10 +522,10 @@ const UIController = {
   async handleReopenConfirm() {
     const taskId = this.currentReopenTaskId;
     if (!taskId) return;
-    
+
     this.hideCompletionModal();
     this.currentReopenTaskId = null;
-    
+
     // Trigger decrement which reopens the task
     await this.handleTaskDecrement(taskId);
   },
@@ -511,7 +552,7 @@ const UIController = {
     this.currentCompletionTaskId = null;
     this.currentReopenTaskId = null;
     this.elements.completionModal.classList.add('hidden');
-    
+
     // Reset modal text to default
     const modalTitle = this.elements.completionModal.querySelector('h2');
     const modalText = this.elements.completionModal.querySelector('p');
@@ -528,7 +569,7 @@ const UIController = {
       await this.handleReopenConfirm();
       return;
     }
-    
+
     // Otherwise it's a completion action (not used in current flow)
     this.hideCompletionModal();
   },
@@ -553,7 +594,7 @@ const UIController = {
   showErrorToast(message) {
     this.elements.errorToastMessage.textContent = message;
     this.elements.errorToast.classList.remove('hidden');
-    
+
     // Auto-dismiss after 5 seconds
     if (this.errorToastTimeout) {
       clearTimeout(this.errorToastTimeout);
@@ -588,7 +629,7 @@ const UIController = {
     // Stop sync queue
     SyncQueue.stop();
     SyncQueue.clearQueue();
-    
+
     // Clear API token
     ApiClient.setToken(null);
     // Reset state to unauthenticated (redirects to login screen)

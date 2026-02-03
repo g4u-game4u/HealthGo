@@ -58,21 +58,23 @@ export const SyncQueue = {
 
       try {
         if (update.action === 'increment') {
-          await ApiClient.markOldestPendingAsDone(update.task);
+          // Use specific task from queue payload
+          await ApiClient.updateTaskStatus(update.task, 'DONE');
         } else if (update.action === 'decrement') {
-          await ApiClient.reopenNewestDoneTask(update.task);
+          // Use specific task from queue payload
+          await ApiClient.updateTaskStatus(update.task, 'PENDING');
         }
 
         // Remove from queue on success
         this.queue.shift();
-        
+
         // Update state with remaining pending changes
         StateManager.setState({
           pendingChanges: [...this.queue]
         });
       } catch (error) {
         console.error('Failed to process queue item:', error);
-        
+
         // If session expired, clear queue and stop
         if (error.message === 'SESSION_EXPIRED') {
           this.clearQueue();
@@ -125,19 +127,19 @@ export const SyncQueue = {
       const tasksWithConflicts = this.detectConflicts(currentTasks, backendTasks);
 
       // Update state with backend data
-      StateManager.setState({ 
+      StateManager.setState({
         tasks: tasksWithConflicts,
-        error: null 
+        error: null
       });
 
       return tasksWithConflicts;
     } catch (error) {
       console.error('Sync failed:', error);
-      
+
       if (error.message === 'SESSION_EXPIRED') {
         throw error;
       }
-      
+
       return null;
     }
   },
@@ -151,7 +153,7 @@ export const SyncQueue = {
   detectConflicts(localTasks, backendTasks) {
     return backendTasks.map(backendTask => {
       const localTask = localTasks.find(t => t.id === backendTask.id);
-      
+
       // If task exists locally and counts differ, mark as conflict
       if (localTask && localTask.executionCount !== backendTask.executionCount) {
         return {
@@ -160,7 +162,7 @@ export const SyncQueue = {
           conflictTimestamp: Date.now()
         };
       }
-      
+
       return backendTask;
     });
   },
@@ -171,7 +173,7 @@ export const SyncQueue = {
    */
   clearConflict(taskId) {
     const state = StateManager.getState();
-    const updatedTasks = state.tasks.map(task => 
+    const updatedTasks = state.tasks.map(task =>
       task.id === taskId ? { ...task, hasConflict: false, conflictTimestamp: null } : task
     );
     StateManager.setState({ tasks: updatedTasks });

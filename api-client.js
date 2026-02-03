@@ -175,7 +175,53 @@ export const ApiClient = {
     ];
 
     // Aggregate by action_template_id
-    return this.aggregateTasks(allTasks);
+    const aggregatedTasks = this.aggregateTasks(allTasks);
+
+    // Helper to check if a date is in the current week (Monday to Sunday)
+    const isDateInCurrentWeek = (dateString) => {
+      if (!dateString) return false;
+      const date = new Date(dateString);
+      const now = new Date();
+      
+      // Get current day (0=Sun, 1=Mon, ..., 6=Sat)
+      const currentDay = now.getDay();
+      // Calculate distance to previous Monday
+      // If Sunday (0), distance is 6. If Monday (1), distance is 0.
+      const distanceToMonday = (currentDay + 6) % 7;
+      
+      // Set to Monday of this week at 00:00:00
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - distanceToMonday);
+      monday.setHours(0, 0, 0, 0);
+      
+      // Set to next Monday (end of Sunday) at 00:00:00
+      const nextMonday = new Date(monday);
+      nextMonday.setDate(monday.getDate() + 7);
+      
+      return date >= monday && date < nextMonday;
+    };
+
+    // Filter "Completed" tasks in the aggregated groups
+    // We want to keep the group if it has any relevant tasks, 
+    // but we only want to COUNT/SHOW relevant completed tasks? 
+    // Actually, usually users want to see the history of what they did *this week*.
+    // If a task group has tasks from last week, they shouldn't count towards *this week's* view 
+    // unless they are still pending.
+    
+    // However, the aggregation logic counts *all* tasks. 
+    // We should filter the raw tasks BEFORE aggregation? 
+    // IF we filter before aggregation, then older DONE tasks won't appear at all. 
+    // Requirement says: "Pending actions still show all, Done/Delivered only this week"
+    
+    const filteredAllTasks = allTasks.filter(task => {
+      if (task.status === 'PENDING') return true;
+      // For DONE/DELIVERED, check date
+      // Use finished_at or created_at
+      const relevantDate = task.finished_at || task.created_at;
+      return isDateInCurrentWeek(relevantDate);
+    });
+
+    return this.aggregateTasks(filteredAllTasks);
   },
 
   /**
