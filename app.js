@@ -408,6 +408,18 @@ const UIController = {
     // Target the specific task
     const taskToComplete = pendingTasks[0];
 
+    // Check if this task group is already being processed for increment
+    const pendingChanges = state.pendingChanges || [];
+    const alreadyProcessing = pendingChanges.some(change => 
+      change.taskId === taskId && 
+      change.action === 'increment'
+    );
+
+    if (alreadyProcessing) {
+      console.log('Task group already being processed for increment, skipping:', taskId);
+      return;
+    }
+
     // Optimistic update - instant UI response
     // We update the specific sub-task's status in the local state
     // AND update the aggregate counts
@@ -435,11 +447,11 @@ const UIController = {
 
     StateManager.setState({ tasks: updatedTasks });
 
-    // Queue the API request with the specific sub-task
+    // Queue the API request with the aggregated task object
     SyncQueue.enqueue({
       taskId,
       action: 'increment',
-      task: taskToComplete // Pass specific sub-task
+      task: taskGroup // Pass aggregated task group, not individual sub-task
     });
   },
 
@@ -462,6 +474,18 @@ const UIController = {
 
     // Target the specific task
     const taskToReopen = doneTasks[0];
+
+    // Check if this task group is already being processed for decrement
+    const pendingChanges = state.pendingChanges || [];
+    const alreadyProcessing = pendingChanges.some(change => 
+      change.taskId === taskId && 
+      change.action === 'decrement'
+    );
+
+    if (alreadyProcessing) {
+      console.log('Task group already being processed for decrement, skipping:', taskId);
+      return;
+    }
 
     // Optimistic update - instant UI response
     const newCount = Math.max(taskGroup.executionCount - 1, 0);
@@ -488,11 +512,11 @@ const UIController = {
 
     StateManager.setState({ tasks: updatedTasks });
 
-    // Queue the API request with the specific sub-task
+    // Queue the API request with the aggregated task object
     SyncQueue.enqueue({
       taskId,
       action: 'decrement',
-      task: taskToReopen // Pass specific sub-task
+      task: taskGroup // Pass aggregated task group, not individual sub-task
     });
   },
 

@@ -180,25 +180,35 @@ export const ApiClient = {
     // Helper to check if a date is in the current week (Monday to Sunday)
     const isDateInCurrentWeek = (dateString) => {
       if (!dateString) return false;
-      const date = new Date(dateString);
-      const now = new Date();
       
-      // Get current day (0=Sun, 1=Mon, ..., 6=Sat)
-      const currentDay = now.getDay();
-      // Calculate distance to previous Monday
-      // If Sunday (0), distance is 6. If Monday (1), distance is 0.
-      const distanceToMonday = (currentDay + 6) % 7;
-      
-      // Set to Monday of this week at 00:00:00
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - distanceToMonday);
-      monday.setHours(0, 0, 0, 0);
-      
-      // Set to next Monday (end of Sunday) at 00:00:00
-      const nextMonday = new Date(monday);
-      nextMonday.setDate(monday.getDate() + 7);
-      
-      return date >= monday && date < nextMonday;
+      try {
+        const date = new Date(dateString);
+        
+        // Check if date is valid
+        if (isNaN(date.getTime())) return false;
+        
+        const now = new Date();
+        
+        // Get current day (0=Sun, 1=Mon, ..., 6=Sat)
+        const currentDay = now.getDay();
+        // Calculate distance to previous Monday
+        // If Sunday (0), distance is 6. If Monday (1), distance is 0.
+        const distanceToMonday = (currentDay + 6) % 7;
+        
+        // Set to Monday of this week at 00:00:00
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - distanceToMonday);
+        monday.setHours(0, 0, 0, 0);
+        
+        // Set to next Monday (end of Sunday) at 00:00:00
+        const nextMonday = new Date(monday);
+        nextMonday.setDate(monday.getDate() + 7);
+        
+        return date >= monday && date < nextMonday;
+      } catch (error) {
+        console.warn('Error parsing date for week filter:', dateString, error);
+        return false;
+      }
     };
 
     // Filter "Completed" tasks in the aggregated groups

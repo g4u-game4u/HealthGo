@@ -25,10 +25,22 @@ export const SyncQueue = {
    * @param {Object} update - { taskId, action: 'increment'|'decrement', task }
    */
   enqueue(update) {
+    // Check if there's already a pending update for this task group and action
+    const existingUpdate = this.queue.find(item => 
+      item.taskId === update.taskId && 
+      item.action === update.action
+    );
+
+    // If there's already a pending update for this task group and action, skip
+    if (existingUpdate) {
+      console.log('Skipping duplicate update for task group:', update.taskId, update.action);
+      return;
+    }
+
     this.queue.push({
       ...update,
       timestamp: Date.now(),
-      id: `${update.taskId}-${Date.now()}`
+      id: `${update.taskId}-${update.action}-${Date.now()}`
     });
 
     // Update state to reflect pending changes
@@ -58,11 +70,11 @@ export const SyncQueue = {
 
       try {
         if (update.action === 'increment') {
-          // Use specific task from queue payload
-          await ApiClient.updateTaskStatus(update.task, 'DONE');
+          // Use the aggregated task object, not the individual sub-task
+          await ApiClient.markOldestPendingAsDone(update.task);
         } else if (update.action === 'decrement') {
-          // Use specific task from queue payload
-          await ApiClient.updateTaskStatus(update.task, 'PENDING');
+          // Use the aggregated task object, not the individual sub-task
+          await ApiClient.reopenNewestDoneTask(update.task);
         }
 
         // Remove from queue on success
