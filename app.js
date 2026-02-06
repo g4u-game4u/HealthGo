@@ -435,13 +435,10 @@ const UIController = {
 
     StateManager.setState({ tasks: updatedTasks });
 
-    // Queue the API request with the UPDATED task group (with optimistic changes)
-    // This ensures the next click will see the updated state
-    const updatedTaskGroup = updatedTasks.find(t => t.id === taskId);
+    // Queue the API request - only need taskId, will fetch current state when processing
     SyncQueue.enqueue({
       taskId,
-      action: 'increment',
-      task: updatedTaskGroup // Pass updated task group with current state
+      action: 'increment'
     });
   },
 
@@ -490,12 +487,10 @@ const UIController = {
 
     StateManager.setState({ tasks: updatedTasks });
 
-    // Queue the API request with the UPDATED task group (with optimistic changes)
-    const updatedTaskGroup = updatedTasks.find(t => t.id === taskId);
+    // Queue the API request - only need taskId, will fetch current state when processing
     SyncQueue.enqueue({
       taskId,
-      action: 'decrement',
-      task: updatedTaskGroup // Pass updated task group with current state
+      action: 'decrement'
     });
   },
 

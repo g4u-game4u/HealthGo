@@ -12,6 +12,8 @@ export const SyncQueue = {
   syncInterval: null,
   SYNC_INTERVAL_MS: 60000, // 1 minute
   processingPromise: null,
+  hasRefreshQueued: false, // Track if refresh is already queued
+  REFRESH_DELAY_MS: 500, // Delay before refresh to let backend catch up
 
   /**
    * Initialize the sync queue and start periodic sync
@@ -25,23 +27,48 @@ export const SyncQueue = {
    * @param {Object} update - { taskId, action: 'increment'|'decrement', task }
    */
   enqueue(update) {
+    // Remove any existing refresh requests from queue
+    this.queue = this.queue.filter(item => item.type !== 'refresh');
+    this.hasRefreshQueued = false;
+
     // Always add to queue - allow multiple rapid clicks on same task
     this.queue.push({
       ...update,
+      type: 'action', // Mark as action request
       timestamp: Date.now(),
       id: `${update.taskId}-${update.action}-${Date.now()}-${Math.random()}`,
       retryCount: 0, // Track retry attempts
       maxRetries: 5 // Maximum retry attempts before giving up
     });
 
-    // Update state to reflect pending changes
+    // Add refresh request at the end
+    this.queueRefresh();
+
+    // Update state to reflect pending changes (excluding refresh requests)
     const state = StateManager.getState();
     StateManager.setState({
-      pendingChanges: [...this.queue]
+      pendingChanges: this.queue.filter(item => item.type === 'action')
     });
 
     // Process queue immediately (non-blocking)
     this.processQueue();
+  },
+
+  /**
+   * Queue a refresh request at the end of the queue
+   * Only one refresh request is queued at a time
+   */
+  queueRefresh() {
+    if (this.hasRefreshQueued) {
+      return; // Already have a refresh queued
+    }
+
+    this.hasRefreshQueued = true;
+    this.queue.push({
+      type: 'refresh',
+      id: `refresh-${Date.now()}`,
+      timestamp: Date.now()
+    });
   },
 
   /**
@@ -60,11 +87,50 @@ export const SyncQueue = {
     while (this.queue.length > 0) {
       const update = this.queue[0];
       
+      // Handle refresh requests
+      if (update.type === 'refresh') {
+        this.queue.shift();
+        this.hasRefreshQueued = false;
+        
+        // Wait 500ms to let backend catch up
+        await new Promise(resolve => setTimeout(resolve, this.REFRESH_DELAY_MS));
+        
+        // Fetch fresh data from backend
+        try {
+          const tasks = await ApiClient.getTasks();
+          StateManager.setState({ 
+            tasks, 
+            error: null,
+            pendingChanges: this.queue.filter(item => item.type === 'action')
+          });
+        } catch (error) {
+          console.error('Failed to refresh tasks:', error);
+          if (error.message === 'SESSION_EXPIRED') {
+            this.clearQueue();
+            this.isProcessing = false;
+            throw error;
+          }
+          // Continue processing even if refresh fails
+        }
+        continue;
+      }
+      
+      // Handle action requests
       try {
+        // Get fresh task state from current state (not from queued update)
+        const currentState = StateManager.getState();
+        const currentTask = currentState.tasks.find(t => t.id === update.taskId);
+        
+        if (!currentTask) {
+          console.error('Task not found in current state:', update.taskId);
+          this.queue.shift();
+          continue;
+        }
+        
         if (update.action === 'increment') {
-          await ApiClient.markOldestPendingAsDone(update.task);
+          await ApiClient.markOldestPendingAsDone(currentTask);
         } else if (update.action === 'decrement') {
-          await ApiClient.reopenNewestDoneTask(update.task);
+          await ApiClient.reopenNewestDoneTask(currentTask);
         }
         
         // Success - remove from queue
@@ -72,7 +138,7 @@ export const SyncQueue = {
         
         // Update state with remaining pending changes
         StateManager.setState({
-          pendingChanges: [...this.queue]
+          pendingChanges: this.queue.filter(item => item.type === 'action')
         });
       } catch (error) {
         console.error('Failed to process queue item:', error);
@@ -91,11 +157,18 @@ export const SyncQueue = {
           // Retry: remove from front and add to end with updated retry count
           console.log(`Retrying queue item (attempt ${update.retryCount}/${update.maxRetries}):`, update.taskId);
           this.queue.shift();
-          this.queue.push(update);
+          
+          // Insert before any refresh requests
+          const refreshIndex = this.queue.findIndex(item => item.type === 'refresh');
+          if (refreshIndex >= 0) {
+            this.queue.splice(refreshIndex, 0, update);
+          } else {
+            this.queue.push(update);
+          }
           
           // Update state
           StateManager.setState({
-            pendingChanges: [...this.queue]
+            pendingChanges: this.queue.filter(item => item.type === 'action')
           });
           
           // Wait before processing next item (exponential backoff)
@@ -112,7 +185,7 @@ export const SyncQueue = {
           
           // Update state
           StateManager.setState({
-            pendingChanges: [...this.queue],
+            pendingChanges: this.queue.filter(item => item.type === 'action'),
             error: `Failed to ${update.action === 'increment' ? 'complete' : 'reopen'} task after ${update.maxRetries} attempts. Please try again.`
           });
         }
@@ -293,6 +366,7 @@ export const SyncQueue = {
    */
   clearQueue() {
     this.queue = [];
+    this.hasRefreshQueued = false;
     StateManager.setState({ pendingChanges: [] });
   },
 
