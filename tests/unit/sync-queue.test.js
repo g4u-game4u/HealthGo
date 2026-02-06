@@ -101,10 +101,18 @@ describe('SyncQueue', () => {
       expect(status.queueLength).toBe(0);
     });
 
-    it('should keep item in queue on failure', async () => {
+    it('should retry failed items up to max retries then revert', async () => {
       ApiClient.markOldestPendingAsDone.mockRejectedValue(new Error('Network error'));
       
-      const task = { id: 'task-1', name: 'Test', tasks: [] };
+      const task = { 
+        id: 'task-1', 
+        name: 'Test', 
+        tasks: [
+          { id: 'sub-1', status: 'DONE', finished_at: new Date().toISOString() }
+        ],
+        executionCount: 1,
+        targetCount: 1
+      };
       
       SyncQueue.enqueue({
         taskId: 'task-1',
@@ -112,10 +120,16 @@ describe('SyncQueue', () => {
         task
       });
 
+      // Process will retry 5 times then give up
       await SyncQueue.processQueue();
 
+      // After max retries, item should be removed and optimistic update reverted
       const status = SyncQueue.getStatus();
-      expect(status.queueLength).toBe(1);
+      expect(status.queueLength).toBe(0);
+      expect(status.isProcessing).toBe(false);
+      
+      // Should have tried 6 times total (1 initial + 5 retries)
+      expect(ApiClient.markOldestPendingAsDone).toHaveBeenCalledTimes(6);
     });
 
     it('should clear queue on session expiry', async () => {

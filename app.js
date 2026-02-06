@@ -405,20 +405,8 @@ const UIController = {
 
     if (pendingTasks.length === 0) return;
 
-    // Target the specific task
+    // Target the specific task (first pending)
     const taskToComplete = pendingTasks[0];
-
-    // Check if this task group is already being processed for increment
-    const pendingChanges = state.pendingChanges || [];
-    const alreadyProcessing = pendingChanges.some(change => 
-      change.taskId === taskId && 
-      change.action === 'increment'
-    );
-
-    if (alreadyProcessing) {
-      console.log('Task group already being processed for increment, skipping:', taskId);
-      return;
-    }
 
     // Optimistic update - instant UI response
     // We update the specific sub-task's status in the local state
@@ -447,11 +435,13 @@ const UIController = {
 
     StateManager.setState({ tasks: updatedTasks });
 
-    // Queue the API request with the aggregated task object
+    // Queue the API request with the UPDATED task group (with optimistic changes)
+    // This ensures the next click will see the updated state
+    const updatedTaskGroup = updatedTasks.find(t => t.id === taskId);
     SyncQueue.enqueue({
       taskId,
       action: 'increment',
-      task: taskGroup // Pass aggregated task group, not individual sub-task
+      task: updatedTaskGroup // Pass updated task group with current state
     });
   },
 
@@ -472,20 +462,8 @@ const UIController = {
 
     if (doneTasks.length === 0) return;
 
-    // Target the specific task
+    // Target the specific task (newest done)
     const taskToReopen = doneTasks[0];
-
-    // Check if this task group is already being processed for decrement
-    const pendingChanges = state.pendingChanges || [];
-    const alreadyProcessing = pendingChanges.some(change => 
-      change.taskId === taskId && 
-      change.action === 'decrement'
-    );
-
-    if (alreadyProcessing) {
-      console.log('Task group already being processed for decrement, skipping:', taskId);
-      return;
-    }
 
     // Optimistic update - instant UI response
     const newCount = Math.max(taskGroup.executionCount - 1, 0);
@@ -512,11 +490,12 @@ const UIController = {
 
     StateManager.setState({ tasks: updatedTasks });
 
-    // Queue the API request with the aggregated task object
+    // Queue the API request with the UPDATED task group (with optimistic changes)
+    const updatedTaskGroup = updatedTasks.find(t => t.id === taskId);
     SyncQueue.enqueue({
       taskId,
       action: 'decrement',
-      task: taskGroup // Pass aggregated task group, not individual sub-task
+      task: updatedTaskGroup // Pass updated task group with current state
     });
   },
 
