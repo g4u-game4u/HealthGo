@@ -117,20 +117,20 @@ export const SyncQueue = {
       
       // Handle action requests
       try {
-        // Get fresh task state from current state (not from queued update)
-        const currentState = StateManager.getState();
-        const currentTask = currentState.tasks.find(t => t.id === update.taskId);
+        // Use the original task state from the queue (before optimistic updates)
+        // This ensures we have the real backend state with PENDING tasks
+        const taskToProcess = update.originalTask;
         
-        if (!currentTask) {
-          console.error('Task not found in current state:', update.taskId);
+        if (!taskToProcess) {
+          console.error('No original task in queue update:', update.taskId);
           this.queue.shift();
           continue;
         }
         
         if (update.action === 'increment') {
-          await ApiClient.markOldestPendingAsDone(currentTask);
+          await ApiClient.markOldestPendingAsDone(taskToProcess);
         } else if (update.action === 'decrement') {
-          await ApiClient.reopenNewestDoneTask(currentTask);
+          await ApiClient.reopenNewestDoneTask(taskToProcess);
         }
         
         // Success - remove from queue

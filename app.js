@@ -435,10 +435,12 @@ const UIController = {
 
     StateManager.setState({ tasks: updatedTasks });
 
-    // Queue the API request - only need taskId, will fetch current state when processing
+    // Queue the API request with the ORIGINAL task state (before optimistic update)
+    // This ensures the queue has the real backend state, not the optimistic UI state
     SyncQueue.enqueue({
       taskId,
-      action: 'increment'
+      action: 'increment',
+      originalTask: taskGroup // Pass original state before optimistic update
     });
   },
 
@@ -487,10 +489,11 @@ const UIController = {
 
     StateManager.setState({ tasks: updatedTasks });
 
-    // Queue the API request - only need taskId, will fetch current state when processing
+    // Queue the API request with the ORIGINAL task state (before optimistic update)
     SyncQueue.enqueue({
       taskId,
-      action: 'decrement'
+      action: 'decrement',
+      originalTask: taskGroup // Pass original state before optimistic update
     });
   },
 
