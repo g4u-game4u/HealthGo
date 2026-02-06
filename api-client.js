@@ -174,9 +174,6 @@ export const ApiClient = {
       ...(Array.isArray(deliveredTasks) ? deliveredTasks : [])
     ];
 
-    // Aggregate by action_template_id
-    const aggregatedTasks = this.aggregateTasks(allTasks);
-
     // Helper to check if a date is in the current week (Monday to Sunday)
     const isDateInCurrentWeek = (dateString) => {
       if (!dateString) return false;
@@ -211,27 +208,21 @@ export const ApiClient = {
       }
     };
 
-    // Filter "Completed" tasks in the aggregated groups
-    // We want to keep the group if it has any relevant tasks, 
-    // but we only want to COUNT/SHOW relevant completed tasks? 
-    // Actually, usually users want to see the history of what they did *this week*.
-    // If a task group has tasks from last week, they shouldn't count towards *this week's* view 
-    // unless they are still pending.
-    
-    // However, the aggregation logic counts *all* tasks. 
-    // We should filter the raw tasks BEFORE aggregation? 
-    // IF we filter before aggregation, then older DONE tasks won't appear at all. 
-    // Requirement says: "Pending actions still show all, Done/Delivered only this week"
-    
-    const filteredAllTasks = allTasks.filter(task => {
+    // Filter tasks: Keep ALL PENDING (regardless of age), only current week DONE/DELIVERED
+    const filteredTasks = allTasks.filter(task => {
+      // Always keep PENDING tasks (even if they're old)
       if (task.status === 'PENDING') return true;
-      // For DONE/DELIVERED, check date
-      // Use finished_at or created_at
-      const relevantDate = task.finished_at || task.created_at;
+      
+      // For DONE/DELIVERED, only keep if from current week
+      // Use finished_at if available, otherwise fall back to updated_at
+      const relevantDate = task.finished_at || task.updated_at;
       return isDateInCurrentWeek(relevantDate);
     });
 
-    return this.aggregateTasks(filteredAllTasks);
+    // Aggregate the filtered tasks
+    const aggregatedTasks = this.aggregateTasks(filteredTasks);
+
+    return aggregatedTasks;
   },
 
   /**
