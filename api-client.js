@@ -5,7 +5,7 @@
 
 import { extractPriority } from './task-utils.js';
 
-export const API_BASE_URL = 'https://g4u-mvp-api.onrender.com';
+export const API_BASE_URL = 'http://172.20.10.9:3000';
 
 export const ApiClient = {
   token: null,
