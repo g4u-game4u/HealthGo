@@ -9,6 +9,8 @@ import { ApiClient } from './api-client.js';
 import { SyncQueue } from './sync-queue.js';
 import { validateCredentials } from './validation.js';
 import { renderTaskCard, sortTasks, incrementExecutionCount, decrementExecutionCount, shouldTriggerCompletionPrompt, confirmCompletion, declineCompletion } from './task-utils.js';
+import { AutoDelivery } from './auto-delivery.js';
+import { AutoDelivery } from './auto-delivery.js';
 
 // =============================================================================
 // UI Controller Module
@@ -52,6 +54,7 @@ const UIController = {
       activeTasks: document.getElementById('active-tasks'),
       completedHeader: document.getElementById('completed-header'),
       completedTasks: document.getElementById('completed-tasks'),
+      addActionButton: document.getElementById('add-action-button'),
       refreshButton: document.getElementById('refresh-button'),
       logoutButton: document.getElementById('logout-button'),
       syncIndicator: document.getElementById('sync-indicator'),
@@ -62,6 +65,16 @@ const UIController = {
       modalBackdrop: document.getElementById('modal-backdrop'),
       modalConfirm: document.getElementById('modal-confirm'),
       modalDecline: document.getElementById('modal-decline'),
+
+      // Action template modal
+      actionTemplateModal: document.getElementById('action-template-modal'),
+      actionModalBackdrop: document.getElementById('action-modal-backdrop'),
+      actionTemplateList: document.getElementById('action-template-list'),
+      actionModalCancel: document.getElementById('action-modal-cancel'),
+
+      // Points
+      lockedPoints: document.getElementById('locked-points'),
+      unlockedPoints: document.getElementById('unlocked-points'),
 
       // Toast
       errorToast: document.getElementById('error-toast'),
@@ -81,11 +94,16 @@ const UIController = {
     // Task list events
     this.elements.refreshButton?.addEventListener('click', this.handleRefresh.bind(this));
     this.elements.logoutButton?.addEventListener('click', this.handleLogout.bind(this));
+    this.elements.addActionButton?.addEventListener('click', this.handleAddAction.bind(this));
 
     // Modal events
     this.elements.modalConfirm?.addEventListener('click', this.handleConfirmCompletion.bind(this));
     this.elements.modalDecline?.addEventListener('click', this.handleDeclineCompletion.bind(this));
     this.elements.modalBackdrop?.addEventListener('click', this.handleDeclineCompletion.bind(this));
+
+    // Action template modal events
+    this.elements.actionModalBackdrop?.addEventListener('click', this.hideActionTemplateModal.bind(this));
+    this.elements.actionModalCancel?.addEventListener('click', this.hideActionTemplateModal.bind(this));
 
     // Toast events
     this.elements.errorToastClose?.addEventListener('click', this.hideErrorToast.bind(this));
@@ -101,12 +119,15 @@ const UIController = {
       this.elements.loginScreen.classList.add('hidden');
       this.elements.taskListScreen.classList.remove('hidden');
       this.elements.taskListScreen.classList.add('flex');
+      this.elements.addActionButton?.classList.remove('hidden');
       this.renderTasks(state.tasks);
+      this.renderPoints(state.userPoints);
       this.updateSyncIndicator(state.pendingChanges);
     } else {
       this.elements.loginScreen.classList.remove('hidden');
       this.elements.taskListScreen.classList.add('hidden');
       this.elements.taskListScreen.classList.remove('flex');
+      this.elements.addActionButton?.classList.add('hidden');
     }
 
     // Show error toast if error exists
@@ -127,6 +148,21 @@ const UIController = {
     } else {
       this.elements.syncIndicator.classList.add('hidden');
       this.elements.syncIndicator.classList.remove('flex');
+    }
+  },
+
+  /**
+   * Render points display
+   * @param {Object} userPoints - { locked, unlocked }
+   * Requirements: 6.2
+   */
+  renderPoints(userPoints) {
+    const points = userPoints || { locked: 0, unlocked: 0 };
+    if (this.elements.lockedPoints) {
+      this.elements.lockedPoints.textContent = points.locked;
+    }
+    if (this.elements.unlockedPoints) {
+      this.elements.unlockedPoints.textContent = points.unlocked;
     }
   },
 
@@ -266,8 +302,17 @@ const UIController = {
       // Fetch tasks after login
       await this.fetchTasks();
 
+      // Fetch user points after login
+      await this.fetchUserPoints();
+
       // Initialize sync queue
       SyncQueue.init();
+
+      // Schedule 18:00 BRT auto-delivery timer
+      const timerId = AutoDelivery.scheduleEndOfDayDelivery((failedCount) => {
+        this.showErrorToast(AutoDelivery.formatDeliveryErrorMessage(failedCount));
+      });
+      StateManager.setState({ autoDeliveryTimerId: timerId });
     } catch (error) {
       StateManager.setState({
         error: error.message,
@@ -360,19 +405,127 @@ const UIController = {
   },
 
   /**
+   * Fetch user points from API
+   * Requirements: 6.1, 6.4, 6.5, 6.6
+   */
+  async fetchUserPoints() {
+    const state = StateManager.getState();
+    const userId = state.user?.id || state.user?.user_id;
+    if (!userId) return;
+
+    try {
+      const data = await ApiClient.getUserData(userId);
+      StateManager.setState({
+        userPoints: {
+          locked: data.locked_points || 0,
+          unlocked: data.unlocked_points || 0
+        }
+      });
+    } catch (error) {
+      if (error.message === 'SESSION_EXPIRED') {
+        this.handleSessionExpired();
+      }
+      // Network error: keep last known values (don't update state)
+    }
+  },
+
+  /**
    * Handle refresh button click
    */
   async handleRefresh() {
     await this.fetchTasks();
+    await this.fetchUserPoints();
+  },
+
+  /**
+   * Handle add action button click
+   * Fetches action templates and opens the selection modal
+   * Requirements: 1.1, 1.3
+   */
+  async handleAddAction() {
+    try {
+      const templates = await ApiClient.getActionTemplates();
+      StateManager.setState({ actionTemplates: templates, isActionModalOpen: true });
+      this.showActionTemplateModal(templates);
+    } catch (error) {
+      this.showErrorToast(error.message || 'Failed to load action templates');
+    }
+  },
+
+  /**
+   * Show action template selection modal
+   * @param {Array} templates - Array of action template objects
+   * Requirements: 1.1
+   */
+  showActionTemplateModal(templates) {
+    const list = this.elements.actionTemplateList;
+    list.innerHTML = templates.map(t =>
+      `<button class="action-template-item w-full text-left px-4 py-3 rounded-lg border border-[#314d68] text-white hover:bg-white/10 transition-colors" data-template-id="${t.id}" data-template-title="${(t.title || '').replace(/"/g, '&quot;')}">${t.title || 'Untitled'}</button>`
+    ).join('');
+
+    // Bind click events on template items
+    list.querySelectorAll('.action-template-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const template = { id: btn.dataset.templateId, title: btn.dataset.templateTitle };
+        this.handleTemplateSelection(template);
+      });
+    });
+
+    this.elements.actionTemplateModal.classList.remove('hidden');
+  },
+
+  /**
+   * Hide action template selection modal
+   */
+  hideActionTemplateModal() {
+    this.elements.actionTemplateModal.classList.add('hidden');
+    this.elements.actionTemplateList.innerHTML = '';
+    StateManager.setState({ isActionModalOpen: false });
+  },
+
+  /**
+   * Handle selection of an action template
+   * @param {Object} template - { id, title }
+   * Requirements: 1.2, 1.4, 1.5
+   */
+  async handleTemplateSelection(template) {
+    this.hideActionTemplateModal();
+    try {
+      await ApiClient.createSelfAssignedAction({
+        action_template_id: template.id,
+        user_email: ApiClient.userEmail,
+        delivery_title: template.title
+      });
+      await this.fetchTasks();
+    } catch (error) {
+      this.showErrorToast(error.message || 'Failed to create action');
+    }
   },
 
   /**
    * Handle logout button click
+   * Requirements: 4.1, 4.2, 4.5, 5.4
    */
-  handleLogout() {
+  async handleLogout() {
     // Stop sync queue
     SyncQueue.stop();
     SyncQueue.clearQueue();
+
+    // Cancel 18:00 BRT timer
+    const state = StateManager.getState();
+    if (state.autoDeliveryTimerId) {
+      AutoDelivery.cancelScheduledDelivery(state.autoDeliveryTimerId);
+    }
+
+    // Auto-deliver completed admin-assigned actions before logout
+    try {
+      const deliverableActions = AutoDelivery.getDeliverableActions(state.tasks);
+      if (deliverableActions.length > 0) {
+        await AutoDelivery.executeDeliveries(deliverableActions);
+      }
+    } catch (error) {
+      console.error('Auto-delivery on logout failed:', error);
+    }
 
     // Clear API token and user email
     ApiClient.setToken(null);

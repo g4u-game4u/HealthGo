@@ -83,6 +83,28 @@ export const ApiClient = {
   },
 
   /**
+   * Fetch available action templates from the G4U API
+   * @returns {Promise<Array>} Array of action template objects
+   */
+  async getActionTemplates() {
+    const response = await fetch(`${API_BASE_URL}/action`, {
+      method: 'GET',
+      headers: this.getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('SESSION_EXPIRED');
+      }
+      const error = await response.json().catch(() => ({ message: 'Failed to fetch action templates' }));
+      throw new Error(error.message || 'Failed to fetch action templates');
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? data : data.data || data.actions || [];
+  },
+
+  /**
    * Fetch tasks by status from user-action/search endpoint
    * @param {string} status - Task status (PENDING, DONE, DELIVERED)
    * @returns {Promise<Array>} - Array of task objects
@@ -109,6 +131,122 @@ export const ApiClient = {
 
     const data = await response.json();
     return data.tasks || data.data || data || [];
+  },
+
+  /**
+   * Fetch available action templates from the G4U API
+   * @returns {Promise<Array>} Array of action template objects
+   */
+  async getActionTemplates() {
+    const response = await fetch(`${API_BASE_URL}/action`, {
+      method: 'GET',
+      headers: this.getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('SESSION_EXPIRED');
+      }
+      const error = await response.json().catch(() => ({ message: 'Failed to fetch action templates' }));
+      throw new Error(error.message || 'Failed to fetch action templates');
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? data : data.data || data.actions || [];
+  },
+
+  /**
+   * Create a self-assigned action
+   * @param {Object} params - { action_template_id, user_email, delivery_title }
+   * @returns {Promise<Object>} Created action
+   */
+  async createSelfAssignedAction(params) {
+    const { action_template_id, user_email, delivery_title } = params;
+    const now = new Date().toISOString();
+    const userIdPrefix = (user_email || '').split('@')[0];
+
+    const payload = {
+      status: 'DONE',
+      user_email,
+      action_id: action_template_id,
+      delivery_id: `${action_template_id}_${userIdPrefix}`,
+      delivery_title: delivery_title || '',
+      created_at: now,
+      integration_id: `${action_template_id}_${Date.now()}`,
+      comments: ['[SELF-ASSIGNED]'],
+      approved: false,
+      approved_by: null,
+      dismissed: false,
+      finished_at: now
+    };
+
+    const response = await fetch(`${API_BASE_URL}/game/action/process`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('SESSION_EXPIRED');
+      }
+      const error = await response.json().catch(() => ({ message: 'Failed to create self-assigned action' }));
+      throw new Error(error.message || 'Failed to create self-assigned action');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Complete a delivery
+   * @param {string} deliveryId - The delivery ID to complete
+   * @param {string} finishedAt - ISO 8601 timestamp
+   * @returns {Promise<{status: number}>} Response with status code
+   */
+  async completeDelivery(deliveryId, finishedAt) {
+    const response = await fetch(`${API_BASE_URL}/game/delivery/${deliveryId}/complete`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ finished_at: finishedAt })
+    });
+
+    if (response.status === 200 || response.status === 204) {
+      return { status: response.status };
+    }
+
+    if (response.status === 401) {
+      throw new Error('SESSION_EXPIRED');
+    }
+
+    const error = await response.json().catch(() => ({ message: 'Failed to complete delivery' }));
+    throw new Error(error.message || 'Failed to complete delivery');
+  },
+
+  /**
+   * Fetch user data (for points)
+   * @param {string} userId
+   * @returns {Promise<Object>} User data with locked_points, unlocked_points
+   */
+  async getUserData(userId) {
+    const response = await fetch(`${API_BASE_URL}/user/${userId}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders()
+    });
+
+    if (response.status === 401) {
+      throw new Error('SESSION_EXPIRED');
+    }
+
+    if (response.status === 404) {
+      return { locked_points: 0, unlocked_points: 0 };
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to fetch user data' }));
+      throw new Error(error.message || 'Failed to fetch user data');
+    }
+
+    return response.json();
   },
 
   /**
@@ -156,22 +294,20 @@ export const ApiClient = {
   },
 
   /**
-   * Fetch user's tasks from G4U API (PENDING + DONE/DELIVERED)
+   * Fetch user's tasks from G4U API (PENDING + DOING + DONE)
    * @returns {Promise<Array>} - Array of aggregated task objects
    */
   async getTasks() {
-    // Fetch all task statuses
-    const [pendingTasks, doneTasks, deliveredTasks] = await Promise.all([
+    const [pendingTasks, doingTasks, doneTasks] = await Promise.all([
       this.getTasksByStatus('PENDING'),
-      this.getTasksByStatus('DONE'),
-      this.getTasksByStatus('DELIVERED')
+      this.getTasksByStatus('DOING'),
+      this.getTasksByStatus('DONE')
     ]);
 
-    // Combine all tasks
     const allTasks = [
       ...(Array.isArray(pendingTasks) ? pendingTasks : []),
-      ...(Array.isArray(doneTasks) ? doneTasks : []),
-      ...(Array.isArray(deliveredTasks) ? deliveredTasks : [])
+      ...(Array.isArray(doingTasks) ? doingTasks : []),
+      ...(Array.isArray(doneTasks) ? doneTasks : [])
     ];
 
     // Helper to check if a date is in the current week (Monday to Sunday)
@@ -208,12 +344,12 @@ export const ApiClient = {
       }
     };
 
-    // Filter tasks: Keep ALL PENDING (regardless of age), only current week DONE/DELIVERED
+    // Filter tasks: Keep ALL PENDING/DOING (regardless of age), only current week DONE
     const filteredTasks = allTasks.filter(task => {
-      // Always keep PENDING tasks (even if they're old)
-      if (task.status === 'PENDING') return true;
+      // Always keep PENDING and DOING tasks (even if they're old)
+      if (task.status === 'PENDING' || task.status === 'DOING') return true;
       
-      // For DONE/DELIVERED, only keep if from current week
+      // For DONE, only keep if from current week
       // Use finished_at if available, otherwise fall back to updated_at
       const relevantDate = task.finished_at || task.updated_at;
       return isDateInCurrentWeek(relevantDate);

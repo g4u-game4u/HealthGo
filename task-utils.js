@@ -5,6 +5,43 @@
  */
 
 /**
+ * Check if a task is self-assigned by inspecting comments for [SELF-ASSIGNED] marker
+ * Requirements: 2.4
+ * @param {Object} task - Raw task object
+ * @returns {boolean}
+ */
+export function isSelfAssigned(task) {
+  if (!task || !Array.isArray(task.comments)) {
+    return false;
+  }
+  return task.comments.includes('[SELF-ASSIGNED]');
+}
+
+/**
+ * Partition tasks into to-do and completed lists
+ * To-Do: PENDING or DOING status
+ * Completed: DONE status
+ * DELIVERED: excluded from both
+ * Requirements: 3.2, 3.3, 3.4
+ * @param {Array} tasks - Array of task objects with status field (these are raw sub-tasks, not aggregated groups)
+ * @returns {{ todo: Array, completed: Array }}
+ */
+export function partitionTasks(tasks) {
+  const todo = [];
+  const completed = [];
+  for (const task of (tasks || [])) {
+    if (task.status === 'PENDING' || task.status === 'DOING') {
+      todo.push(task);
+    } else if (task.status === 'DONE') {
+      completed.push(task);
+    }
+    // DELIVERED is excluded from both lists
+  }
+  return { todo, completed };
+}
+
+
+/**
  * Get border color class for priority
  * Maps priority value to Tailwind border color class
  * Requirements: 2.2, 2.3, 2.4, 2.5
@@ -71,6 +108,32 @@ export function renderTaskCard(task, isCompleted) {
   const teamInfo = task.teamName || '';
   
   if (isCompleted) {
+    // Check if any sub-task in the group is self-assigned (Requirements: 2.2, 2.3)
+    const hasSelfAssigned = Array.isArray(task.tasks) && task.tasks.some(subTask => isSelfAssigned(subTask));
+
+    if (hasSelfAssigned) {
+      return `
+        <button 
+          class="task-card flex flex-col gap-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 p-6 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors text-left w-full cursor-pointer" 
+          data-task-id="${task.id}"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex flex-col gap-1">
+              <p class="text-xl font-bold text-zinc-500 dark:text-zinc-400 line-through">${task.name}</p>
+              ${teamInfo ? `<p class="text-sm text-zinc-400 dark:text-zinc-500">${teamInfo}</p>` : ''}
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200">Awaiting approval</span>
+              <span class="material-symbols-outlined text-3xl text-amber-500" style="font-variation-settings: 'FILL' 1;">hourglass_top</span>
+            </div>
+          </div>
+          <div class="w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-700 h-2.5">
+            <div class="h-full rounded-full bg-amber-500" style="width: 100%;"></div>
+          </div>
+        </button>
+      `;
+    }
+
     return `
       <button 
         class="task-card flex flex-col gap-4 rounded-xl bg-zinc-100 dark:bg-zinc-800/30 p-6 hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-colors text-left w-full cursor-pointer" 
@@ -210,4 +273,15 @@ export function confirmCompletion(task) {
 export function declineCompletion(task) {
   // Task remains active (isCompleted stays false)
   return { ...task, isCompleted: false };
+}
+
+/**
+ * Render points display HTML
+ * Requirements: 6.2
+ * @param {{ locked: number, unlocked: number }} userPoints
+ * @returns {string} HTML string containing both point values
+ */
+export function renderPointsHTML(userPoints) {
+  const points = userPoints || { locked: 0, unlocked: 0 };
+  return `<span class="locked-points">${points.locked}</span><span class="unlocked-points">${points.unlocked}</span>`;
 }

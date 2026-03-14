@@ -153,7 +153,11 @@ describe('StateManager Property Tests', () => {
         tasks: [],
         isLoading: false,
         error: null,
-        pendingChanges: []
+        pendingChanges: [],
+        userPoints: { locked: 0, unlocked: 0 },
+        autoDeliveryTimerId: null,
+        actionTemplates: [],
+        isActionModalOpen: false
       };
 
       fc.assert(

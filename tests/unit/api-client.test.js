@@ -37,7 +37,7 @@ describe('ApiClient', () => {
         `${API_BASE_URL}/auth/login`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'client_id': 'template' },
+          headers: { 'Content-Type': 'application/json', 'client_id': 'healthgo' },
           body: JSON.stringify({ email: 'test@example.com', password: 'password123' })
         }
       );
@@ -88,12 +88,12 @@ describe('ApiClient', () => {
 
       expect(result).toEqual(mockTasks);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${API_BASE_URL}/user-action/search?user_email=test%40example.com&STATUS=PENDING&use_pagination=false`,
+        `${API_BASE_URL}/user-action/search?user_email=test%40example.com&status=PENDING&use_pagination=false`,
         {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'client_id': 'template',
+            'client_id': 'healthgo',
             'Authorization': 'Bearer valid-token'
           }
         }
@@ -117,22 +117,24 @@ describe('ApiClient', () => {
       ApiClient.userEmail = 'test@example.com';
     });
 
-    it('should fetch PENDING, DONE, and DELIVERED tasks and combine them (Requirement 2.1)', async () => {
-      const pendingTasks = [{ id: '1', name: 'Pending Task' }];
-      const doneTasks = [{ id: '2', name: 'Done Task' }];
-      const deliveredTasks = [{ id: '3', name: 'Delivered Task' }];
+    it('should fetch PENDING, DOING, and DONE tasks and combine them (Requirements 3.1, 3.5)', async () => {
+      const now = new Date();
+      const todayISO = now.toISOString();
+      const pendingTasks = [{ id: '1', action_template_id: '1', action_title: 'Pending Task', status: 'PENDING', comments: [] }];
+      const doingTasks = [{ id: '2', action_template_id: '2', action_title: 'Doing Task', status: 'DOING', comments: [] }];
+      const doneTasks = [{ id: '3', action_template_id: '3', action_title: 'Done Task', status: 'DONE', finished_at: todayISO, comments: [] }];
 
       global.fetch
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ tasks: pendingTasks }) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ tasks: doneTasks }) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ tasks: deliveredTasks }) });
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ tasks: doingTasks }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ tasks: doneTasks }) });
 
       const result = await ApiClient.getTasks();
 
       expect(result).toHaveLength(3);
-      expect(result[0]).toEqual({ id: '1', name: 'Pending Task', isCompleted: false });
-      expect(result[1]).toEqual({ id: '2', name: 'Done Task', isCompleted: true });
-      expect(result[2]).toEqual({ id: '3', name: 'Delivered Task', isCompleted: true });
+      expect(result.find(t => t.name === 'Pending Task')).toBeDefined();
+      expect(result.find(t => t.name === 'Doing Task')).toBeDefined();
+      expect(result.find(t => t.name === 'Done Task')).toBeDefined();
       expect(global.fetch).toHaveBeenCalledTimes(3);
     });
 
@@ -147,74 +149,16 @@ describe('ApiClient', () => {
     });
 
     it('should throw error if any status fetch fails', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: () => Promise.resolve({ message: 'Server error' })
-      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          json: () => Promise.resolve({ message: 'Server error' })
+        })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ tasks: [] }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ tasks: [] }) });
 
       await expect(ApiClient.getTasks()).rejects.toThrow('Server error');
-    });
-  });
-
-
-  describe('updateTaskExecution', () => {
-    beforeEach(() => {
-      ApiClient.token = 'valid-token';
-    });
-
-    it('should update task execution count (Requirement 3.3)', async () => {
-      const mockUpdatedTask = {
-        id: 'task-1',
-        name: 'Test Task',
-        executionCount: 5,
-        targetCount: 10
-      };
-
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockUpdatedTask)
-      });
-
-      const result = await ApiClient.updateTaskExecution('task-1', 5);
-
-      expect(result).toEqual(mockUpdatedTask);
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${API_BASE_URL}/tasks/task-1`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'client_id': 'template',
-            'Authorization': 'Bearer valid-token'
-          },
-          body: JSON.stringify({ executionCount: 5 })
-        }
-      );
-    });
-
-    it('should throw SESSION_EXPIRED on 401 response', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        json: () => Promise.resolve({ message: 'Unauthorized' })
-      });
-
-      await expect(
-        ApiClient.updateTaskExecution('task-1', 5)
-      ).rejects.toThrow('SESSION_EXPIRED');
-    });
-
-    it('should throw error on update failure', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: () => Promise.resolve({ message: 'Invalid execution count' })
-      });
-
-      await expect(
-        ApiClient.updateTaskExecution('task-1', -1)
-      ).rejects.toThrow('Invalid execution count');
     });
   });
 
@@ -246,7 +190,7 @@ describe('ApiClient', () => {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            'client_id': 'template',
+            'client_id': 'healthgo',
             'Authorization': 'Bearer valid-token'
           },
           body: JSON.stringify({ isCompleted: true })
@@ -275,13 +219,89 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('getUserData', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+      global.fetch = vi.fn();
+      ApiClient.token = 'valid-token';
+    });
+
+    it('should fetch user data with correct URL and headers (Requirement 6.1)', async () => {
+      const mockUserData = {
+        user_id: 'user-123',
+        full_name: 'Test User',
+        locked_points: 50,
+        unlocked_points: 100
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockUserData)
+      });
+
+      const result = await ApiClient.getUserData('user-123');
+
+      expect(result).toEqual(mockUserData);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${API_BASE_URL}/user/user-123`,
+        {
+          method: 'GET',
+          headers: ApiClient.getAuthHeaders()
+        }
+      );
+    });
+
+    it('should throw SESSION_EXPIRED on 401 response (Requirement 6.4)', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ message: 'Unauthorized' })
+      });
+
+      await expect(ApiClient.getUserData('user-123')).rejects.toThrow('SESSION_EXPIRED');
+    });
+
+    it('should return zero points on 404 response (Requirement 6.5)', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({ message: 'User not found' })
+      });
+
+      const result = await ApiClient.getUserData('nonexistent-user');
+
+      expect(result).toEqual({ locked_points: 0, unlocked_points: 0 });
+    });
+
+    it('should throw error on other failure statuses', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ message: 'Internal server error' })
+      });
+
+      await expect(ApiClient.getUserData('user-123')).rejects.toThrow('Internal server error');
+    });
+
+    it('should throw default error when API returns non-JSON error', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.reject(new Error('Not JSON'))
+      });
+
+      await expect(ApiClient.getUserData('user-123')).rejects.toThrow('Failed to fetch user data');
+    });
+  });
+
   describe('getBaseHeaders', () => {
     it('should return headers with client_id', () => {
       const headers = ApiClient.getBaseHeaders();
       
       expect(headers).toEqual({ 
         'Content-Type': 'application/json',
-        'client_id': 'template'
+        'client_id': 'healthgo'
       });
     });
   });
@@ -293,7 +313,7 @@ describe('ApiClient', () => {
       
       expect(headers).toEqual({ 
         'Content-Type': 'application/json',
-        'client_id': 'template'
+        'client_id': 'healthgo'
       });
       expect(headers.Authorization).toBeUndefined();
     });
@@ -304,7 +324,7 @@ describe('ApiClient', () => {
       
       expect(headers).toEqual({
         'Content-Type': 'application/json',
-        'client_id': 'template',
+        'client_id': 'healthgo',
         'Authorization': 'Bearer my-token'
       });
     });

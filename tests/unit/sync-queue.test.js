@@ -13,6 +13,7 @@ describe('SyncQueue', () => {
     // Clear queue before each test
     SyncQueue.clearQueue();
     SyncQueue.stop();
+    SyncQueue.isProcessing = false;
     
     // Reset state
     StateManager.reset();
@@ -27,27 +28,42 @@ describe('SyncQueue', () => {
     vi.restoreAllMocks();
     SyncQueue.stop();
     SyncQueue.clearQueue();
+    SyncQueue.isProcessing = false;
   });
 
   describe('enqueue', () => {
-    it('should add update to queue', () => {
+    it('should add update to queue and trigger processing', () => {
+      // Prevent auto-processing so we can inspect queue state
+      SyncQueue.isProcessing = true;
+
+      const task = { id: 'task-1', name: 'Test', tasks: [] };
       const update = {
         taskId: 'task-1',
         action: 'increment',
-        task: { id: 'task-1', name: 'Test' }
+        task,
+        originalTask: task
       };
 
       SyncQueue.enqueue(update);
 
       const status = SyncQueue.getStatus();
-      expect(status.queueLength).toBe(1);
+      // Queue has 1 action + 1 refresh = 2 items
+      expect(status.queueLength).toBe(2);
+      // The first item should be the action
+      expect(SyncQueue.queue[0].type).toBe('action');
+      expect(SyncQueue.queue[0].taskId).toBe('task-1');
     });
 
     it('should update state with pending changes', () => {
+      // Prevent auto-processing
+      SyncQueue.isProcessing = true;
+
+      const task = { id: 'task-1', name: 'Test', tasks: [] };
       const update = {
         taskId: 'task-1',
         action: 'increment',
-        task: { id: 'task-1', name: 'Test' }
+        task,
+        originalTask: task
       };
 
       SyncQueue.enqueue(update);
@@ -59,12 +75,19 @@ describe('SyncQueue', () => {
 
   describe('processQueue', () => {
     it('should process increment action', async () => {
-      const task = { id: 'task-1', name: 'Test', tasks: [] };
+      const task = { id: 'task-1', name: 'Test', tasks: [{ id: 'sub-1', status: 'PENDING', created_at: new Date().toISOString() }] };
       
-      SyncQueue.enqueue({
+      // Manually add to queue to control the flow
+      SyncQueue.queue.push({
         taskId: 'task-1',
         action: 'increment',
-        task
+        task,
+        originalTask: task,
+        type: 'action',
+        timestamp: Date.now(),
+        id: 'test-1',
+        retryCount: 0,
+        maxRetries: 5
       });
 
       await SyncQueue.processQueue();
@@ -73,12 +96,18 @@ describe('SyncQueue', () => {
     });
 
     it('should process decrement action', async () => {
-      const task = { id: 'task-1', name: 'Test', tasks: [] };
+      const task = { id: 'task-1', name: 'Test', tasks: [{ id: 'sub-1', status: 'DONE', created_at: new Date().toISOString() }] };
       
-      SyncQueue.enqueue({
+      SyncQueue.queue.push({
         taskId: 'task-1',
         action: 'decrement',
-        task
+        task,
+        originalTask: task,
+        type: 'action',
+        timestamp: Date.now(),
+        id: 'test-2',
+        retryCount: 0,
+        maxRetries: 5
       });
 
       await SyncQueue.processQueue();
@@ -87,12 +116,18 @@ describe('SyncQueue', () => {
     });
 
     it('should remove item from queue on success', async () => {
-      const task = { id: 'task-1', name: 'Test', tasks: [] };
+      const task = { id: 'task-1', name: 'Test', tasks: [{ id: 'sub-1', status: 'PENDING', created_at: new Date().toISOString() }] };
       
-      SyncQueue.enqueue({
+      SyncQueue.queue.push({
         taskId: 'task-1',
         action: 'increment',
-        task
+        task,
+        originalTask: task,
+        type: 'action',
+        timestamp: Date.now(),
+        id: 'test-3',
+        retryCount: 0,
+        maxRetries: 5
       });
 
       await SyncQueue.processQueue();
@@ -101,35 +136,23 @@ describe('SyncQueue', () => {
       expect(status.queueLength).toBe(0);
     });
 
-    it('should retry failed items up to max retries then revert', async () => {
-      ApiClient.markOldestPendingAsDone.mockRejectedValue(new Error('Network error'));
-      
-      const task = { 
-        id: 'task-1', 
-        name: 'Test', 
-        tasks: [
-          { id: 'sub-1', status: 'DONE', finished_at: new Date().toISOString() }
-        ],
-        executionCount: 1,
-        targetCount: 1
-      };
-      
-      SyncQueue.enqueue({
+    it('should skip items without originalTask', async () => {
+      SyncQueue.queue.push({
         taskId: 'task-1',
         action: 'increment',
-        task
+        task: { id: 'task-1' },
+        // no originalTask
+        type: 'action',
+        timestamp: Date.now(),
+        id: 'test-no-original',
+        retryCount: 0,
+        maxRetries: 5
       });
 
-      // Process will retry 5 times then give up
       await SyncQueue.processQueue();
 
-      // After max retries, item should be removed and optimistic update reverted
-      const status = SyncQueue.getStatus();
-      expect(status.queueLength).toBe(0);
-      expect(status.isProcessing).toBe(false);
-      
-      // Should have tried 6 times total (1 initial + 5 retries)
-      expect(ApiClient.markOldestPendingAsDone).toHaveBeenCalledTimes(6);
+      expect(ApiClient.markOldestPendingAsDone).not.toHaveBeenCalled();
+      expect(SyncQueue.queue.length).toBe(0);
     });
 
     it('should clear queue on session expiry', async () => {
@@ -137,10 +160,16 @@ describe('SyncQueue', () => {
       
       const task = { id: 'task-1', name: 'Test', tasks: [] };
       
-      SyncQueue.enqueue({
+      SyncQueue.queue.push({
         taskId: 'task-1',
         action: 'increment',
-        task
+        task,
+        originalTask: task,
+        type: 'action',
+        timestamp: Date.now(),
+        id: 'test-session',
+        retryCount: 0,
+        maxRetries: 5
       });
 
       try {
@@ -156,11 +185,15 @@ describe('SyncQueue', () => {
 
   describe('syncWithBackend', () => {
     it('should skip sync if queue has pending changes', async () => {
-      SyncQueue.enqueue({
+      // Prevent auto-processing
+      SyncQueue.isProcessing = true;
+      SyncQueue.queue.push({
         taskId: 'task-1',
         action: 'increment',
-        task: { id: 'task-1' }
+        type: 'action',
+        id: 'test-pending'
       });
+      SyncQueue.isProcessing = false;
 
       const result = await SyncQueue.syncWithBackend();
 

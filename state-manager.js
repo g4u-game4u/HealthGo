@@ -14,7 +14,11 @@ const initialState = {
   tasks: [],
   isLoading: false,
   error: null,
-  pendingChanges: [] // Queue of pending API requests
+  pendingChanges: [], // Queue of pending API requests
+  userPoints: { locked: 0, unlocked: 0 },
+  autoDeliveryTimerId: null,
+  actionTemplates: [],
+  isActionModalOpen: false
 };
 
 /**
