@@ -10,7 +10,6 @@ import { SyncQueue } from './sync-queue.js';
 import { validateCredentials } from './validation.js';
 import { renderTaskCard, sortTasks, incrementExecutionCount, decrementExecutionCount, shouldTriggerCompletionPrompt, confirmCompletion, declineCompletion } from './task-utils.js';
 import { AutoDelivery } from './auto-delivery.js';
-import { AutoDelivery } from './auto-delivery.js';
 
 // =============================================================================
 // UI Controller Module
